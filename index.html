@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GDG Flight Simulator - Starter</title>
+    <!-- Load CesiumJS -->
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000;
+        }
+        #cesiumContainer {
+            width: 100%; height: 100%; position: absolute; top: 0; left: 0;
+        }
+        /* Paste your HUD CSS here */
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+    
+    <!-- Paste your HUD HTML here -->
+
+    <script>
+        // Use a placeholder API key for Google Maps 3D Tiles if needed, or default Cesium OSM Buildings
+        const GOOGLE_API_KEY = "YOUR_GOOGLE_MAPS_API_KEY"; // Optional: Add your key if you want Photorealistic 3D Tiles
+
+        const viewer = new Cesium.Viewer("cesiumContainer", {
+            terrainProvider: await Cesium.createWorldTerrainAsync(),
+            baseLayerPicker: false,
+            geocoder: false,
+            homeButton: false,
+            infoBox: false,
+            navigationHelpButton: false,
+            sceneModePicker: false,
+            timeline: false,
+            animation: false,
+        });
+
+        // Try to load Google Photorealistic 3D Tiles if a key is provided
+        if (GOOGLE_API_KEY && GOOGLE_API_KEY !== "YOUR_GOOGLE_MAPS_API_KEY") {
+            try {
+                const tileset = await Cesium.Cesium3DTileset.fromUrl(
+                    "https://tile.googleapis.com/v1/3dtiles/root.json?key=" + GOOGLE_API_KEY
+                );
+                viewer.scene.primitives.add(tileset);
+            } catch (e) {
+                console.error("Failed to load 3D tiles:", e);
+            }
+        } else {
+            viewer.scene.primitives.add(await Cesium.createOsmBuildingsAsync());
+        }
+
+        // Set initial camera position (Sunnyvale)
+        viewer.camera.setView({
+            destination: Cesium.Cartesian3.fromDegrees(-122.02985, 37.37656, 3000),
+            orientation: {
+                heading: 0,
+                pitch: Cesium.Math.toRadians(-20),
+                roll: 0
+            }
+        });
+
+        // Basic Aircraft State
+        const ac = {
+            lon: -122.02985,
+            lat: 37.37656,
+            alt: 3000,
+            heading: 0,
+            pitch: 0,
+            roll: 0,
+            speed: 50 // m/s
+        };
+
+        const keys = {};
+        document.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; });
+        document.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+
+        // Main Flight Loop
+        viewer.scene.preUpdate.addEventListener(function(scene, time) {
+            // Adjust these constants
+            const thrust = 1000.0; // Increase this for more speed
+            const turnRate = 0.05; // Make turns snappier
+
+            // Controls
+            if (keys['w']) ac.pitch -= turnRate;
+            if (keys['s']) ac.pitch += turnRate;
+            if (keys['a']) ac.roll -= turnRate;
+            if (keys['d']) ac.roll += turnRate;
+            if (keys['q']) ac.heading -= turnRate;
+            if (keys['e']) ac.heading += turnRate;
+
+            // Basic Physics / Movement
+            const velocityX = ac.speed * Math.cos(ac.pitch) * Math.sin(ac.heading);
+            const velocityY = ac.speed * Math.cos(ac.pitch) * Math.cos(ac.heading);
+            const velocityZ = ac.speed * Math.sin(-ac.pitch); // Simplified
+
+            // Update Position (Approximate Cartesian conversion)
+            const currentCartesian = Cesium.Cartesian3.fromDegrees(ac.lon, ac.lat, ac.alt);
+            const transform = Cesium.Transforms.eastNorthUpToFixedFrame(currentCartesian);
+            
+            const offset = new Cesium.Cartesian3(velocityX * 0.016, velocityY * 0.016, velocityZ * 0.016); // Assuming ~60fps (0.016s)
+            
+            // This is a very simplified movement model for the starter code
+            ac.alt += velocityZ * 0.016; 
+            // In a real scenario, you'd calculate proper lon/lat from Cartesian, but we let Cesium camera handle it below
+            
+            // Move Camera
+            viewer.camera.setView({
+                destination: Cesium.Cartesian3.fromDegrees(ac.lon, ac.lat, ac.alt),
+                orientation: {
+                    heading: ac.heading,
+                    pitch: ac.pitch,
+                    roll: ac.roll
+                }
+            });
+
+            // Update HUD text if elements exist
+            const speedEl = document.querySelector('.speed');
+            const altEl = document.querySelector('.alt');
+            if (speedEl) speedEl.textContent = `SPD: ${Math.round(ac.speed)}`;
+            if (altEl) altEl.textContent = `ALT: ${Math.round(ac.alt)}`;
+        });
+    </script>
+</body>
+</html>
